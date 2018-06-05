@@ -51,12 +51,3 @@ void FilePathOperation::CutLastFilePathItem(std::wstring & fName)
 		fName = fName.substr(0, pos);
 	}
 }
-
-void FEEThread::run(void(__cdecl *start_address)(void *),
-					unsigned stack_size,
-					void *arglist,
-					size_t from,
-					size_t to)
-{
-	_beginthread(start_address, 0, arglist);
-}

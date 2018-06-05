@@ -26,16 +26,3 @@ namespace FilePathOperation
 	void CutFileExtantion(std::wstring & fName);
 	void CutLastFilePathItem(std::wstring & fName);
 }
-
-class FEEThread 
-{
-	public:
-		FEEThread(size_t id = 0) : m_id(id) {}
-		void run(void(__cdecl *start_address)(void *),
-						unsigned stack_size,
-						void *arglist, 
-						size_t from,
-						size_t to);
-	private:
-		size_t m_id;
-};
