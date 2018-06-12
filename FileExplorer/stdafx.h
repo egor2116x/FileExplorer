@@ -14,6 +14,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <array>
 #include <Windows.h>
 #include <memory>
 #include <exception>

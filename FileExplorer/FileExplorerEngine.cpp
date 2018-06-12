@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "FileExplorerEngine.h"
 
-size_t FileExplorerEngine::GetFileSize(WIN32_FIND_DATA & _wfd)
+size_t FileExplorerEngine::GetFileSize(WIN32_FIND_DATA & _wfd) const noexcept
 {
     return (_wfd.nFileSizeHigh * (MAXDWORD + 1)) + _wfd.nFileSizeLow;
 }
@@ -40,7 +40,7 @@ void FileExplorerEngine::GetListFilesInFolder(std::wstring & folderPath)
         if (IsDirectory(wfd.dwFileAttributes) && std::wstring(wfd.cFileName)[0] != L'.')
         {
             ++m_level;
-            g_fileMap.push_back(Item(m_level, DIR_MARK, folderPath.substr(0, folderPath.size() - 1), std::wstring(wfd.cFileName), this->GetFileSize(wfd), hFile));
+            g_fileMap.push_back(Item(m_level, ObjectMark::DIR_MARK, folderPath.substr(0, folderPath.size() - 1), std::wstring(wfd.cFileName), this->GetFileSize(wfd), hFile));
             BuildNewFolderPath(folderPath, std::wstring(wfd.cFileName));
             GetListFilesInFolder(folderPath);
             FilePathOperation::CutLastFilePathItem(folderPath);
@@ -50,11 +50,11 @@ void FileExplorerEngine::GetListFilesInFolder(std::wstring & folderPath)
         }
         else if (std::wstring(wfd.cFileName)[0] != L'.')
         {
-            g_fileMap.push_back(Item(m_level, FILE_MARK, folderPath.substr(0, folderPath.size() - 1), std::wstring(wfd.cFileName), this->GetFileSize(wfd), hFile));
+            g_fileMap.push_back(Item(m_level, ObjectMark::FILE_MARK, folderPath.substr(0, folderPath.size() - 1), std::wstring(wfd.cFileName), this->GetFileSize(wfd), hFile));
         }
         else
         {
-            g_fileMap.push_back(Item(m_level, DIR_MARK, folderPath.substr(0, folderPath.size() - 1), std::wstring(wfd.cFileName), this->GetFileSize(wfd), hFile));
+            g_fileMap.push_back(Item(m_level, ObjectMark::DIR_MARK, folderPath.substr(0, folderPath.size() - 1), std::wstring(wfd.cFileName), this->GetFileSize(wfd), hFile));
         }
 
     } while (FindNextFile(hFile, &wfd) != 0);
