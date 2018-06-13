@@ -222,9 +222,15 @@ void WriteFileAction<T>::operator()(T & i)
 template<typename T>
 void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
 {
+    // read
+    HANDLE eventEndOfFile = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (eventEndOfFile == NULL)
+    {
+        std::cout << "couldn't cteate event" << std::endl;
+        return;
+    }
 	const size_t leftSize = (m_amountThreads - idxThread - 1 != 0 ? m_fileSizeLimit : m_currentFileSize - (m_fileSizeLimit * idxThread));
 
-    // read
     HANDLE hFile = CreateFile(m_FromFile.c_str(), GENERIC_READ, FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
     if (hFile == INVALID_HANDLE_VALUE)
     {
@@ -236,11 +242,11 @@ void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
     buffer.resize(leftSize);
 
     OVERLAPPED overlapped;
-    overlapped.hEvent = 0;
+    overlapped.hEvent = eventEndOfFile;
     overlapped.Internal = 0;
     overlapped.InternalHigh = 0;
     overlapped.Pointer = 0;
-    overlapped.OffsetHigh = m_fileSizeLimit * idxThread;
+    overlapped.OffsetHigh = 0;
     overlapped.Offset = m_fileSizeLimit * idxThread;
 
     if (ReadFile(hFile, reinterpret_cast<LPVOID>(&buffer[0]), buffer.size(), NULL, &overlapped))
@@ -260,38 +266,30 @@ void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
    
     std::wcout << L"Thread : " << idxThread << L" read data with offset : " << m_fileSizeLimit * idxThread << L" read bytes :" << leftSize << std::endl;
 
+
     CloseHandle(hFile);
+    CloseHandle(eventEndOfFile);
+    WaitForSingleObject(eventEndOfFile, INFINITE);
 
     // write
-    overlapped.hEvent = 0;
-    overlapped.Internal = 0;
-    overlapped.InternalHigh = 0;
-    overlapped.Pointer = 0;
-    overlapped.OffsetHigh = m_fileSizeLimit * idxThread;
-    overlapped.Offset = m_fileSizeLimit * idxThread;
+    HANDLE eventEndOfFileWrite = CreateEvent(NULL, FALSE, FALSE, NULL);
 
-    hFile = CreateFile(m_ToFile.c_str(), GENERIC_WRITE, FILE_SHARE_DELETE, NULL, CREATE_NEW, FILE_FLAG_OVERLAPPED, NULL);
+    OVERLAPPED overlappedWrite;
+    overlappedWrite.hEvent = eventEndOfFileWrite;
+    overlappedWrite.Internal = 0;
+    overlappedWrite.InternalHigh = 0;
+    overlappedWrite.Pointer = 0;
+    overlappedWrite.OffsetHigh = 0;
+    overlappedWrite.Offset = m_fileSizeLimit * idxThread;
+
+    hFile = CreateFile(m_ToFile.c_str(), GENERIC_WRITE, FILE_SHARE_DELETE, NULL, OPEN_ALWAYS, FILE_FLAG_OVERLAPPED, NULL);
     if (hFile == INVALID_HANDLE_VALUE)
     {
-        hFile = CreateFile(m_ToFile.c_str(), GENERIC_WRITE, FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
-        if (hFile == INVALID_HANDLE_VALUE)
-        {
-            std::wcout << L"Thread : " << idxThread << " file didn't open for write " << m_ToFile << std::endl;
-            return;
-        }
+        std::wcout << L"Thread : " << idxThread << " file didn't open for write " << m_ToFile << std::endl;
+        return;
     }
 
-    if(SetFilePointer(hFile, m_fileSizeLimit * idxThread, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
-    {
-        std::cout << "couldn't set of offset SetFilePointer" << std::endl;
-    }
-
-    if (!SetEndOfFile(hFile))
-    {
-        std::cout << "couldn't set of offset in SetEndOfFile" << std::endl;
-    }
-
-    if (WriteFile(hFile, reinterpret_cast<LPVOID>(&buffer[0]), buffer.size(), NULL, &overlapped))
+    if (WriteFile(hFile, reinterpret_cast<LPVOID>(&buffer[0]), buffer.size(), NULL, &overlappedWrite))
     {
         std::cout << "sync output " << std::endl;
     }
@@ -308,7 +306,8 @@ void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
     std::wcout << L"Thread : " << idxThread << L" write data with offset : " << m_fileSizeLimit * idxThread << L" write bytes :" << leftSize << std::endl;
 
     CloseHandle(hFile);
-
+    CloseHandle(eventEndOfFileWrite);
+    WaitForSingleObject(eventEndOfFileWrite, INFINITE);
 }
 
 template<typename T>
