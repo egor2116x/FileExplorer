@@ -1,6 +1,7 @@
 #pragma once
 #include "stdafx.h"
 #include "Common.h"
+#include <list>
 
 template<typename T>
 class RenameFileAction
@@ -52,8 +53,6 @@ class WriteFileAction
 		std::wstring m_writeData;
 };
 
-std::mutex mtx;
-
 template<typename T>
 class MultyThreadCopyFileAction
 {
@@ -69,11 +68,7 @@ class MultyThreadCopyFileAction
 		size_t m_fileSizeLimit; // in MB
 		size_t m_currentFileSize; // in MB
 		size_t m_amountThreads;
-		std::vector<std::thread *> m_threads;
 };
-
-std::wstring m_FromFile;
-std::wstring m_ToFile;
 
 template<typename T>
 void RenameFileAction<T>::operator()(T & i)
@@ -224,11 +219,14 @@ void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
 {
     // read
     HANDLE eventEndOfFile = CreateEvent(NULL, FALSE, FALSE, NULL);
+
     if (eventEndOfFile == NULL)
     {
         std::cout << "couldn't cteate event" << std::endl;
         return;
     }
+
+    // calculate size of read/write operation
 	const size_t leftSize = (m_amountThreads - idxThread - 1 != 0 ? m_fileSizeLimit : m_currentFileSize - (m_fileSizeLimit * idxThread));
 
     HANDLE hFile = CreateFile(m_FromFile.c_str(), GENERIC_READ, FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
@@ -313,6 +311,7 @@ void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
 template<typename T>
 void MultyThreadCopyFileAction<T>::operator()(T & i)
 {
+    static std::vector<std::thread> m_threads;
 	std::wstring fullFilePath = i.m_path + i.m_fName;
 	if (fullFilePath.compare(m_FromFile) != 0)
 	{
@@ -328,11 +327,17 @@ void MultyThreadCopyFileAction<T>::operator()(T & i)
 	m_fileSizeLimit = (m_fileSizeLimit > 0 ? m_fileSizeLimit * 1000000 : 1000000);
 	m_amountThreads = static_cast<size_t>((m_currentFileSize / m_fileSizeLimit) <= 0 
 						? 1 : std::ceil(static_cast<double>(m_currentFileSize) / static_cast<double>(m_fileSizeLimit)));
-	for (size_t i = 0; i < m_amountThreads; i++)
-	{
-		std::thread * t = new std::thread(&MultyThreadCopyFileAction<T>::CopyFile, this, i);
-		t->join();
-		m_threads.push_back(t);
-	}
+
+    for (size_t j = 0; j < m_amountThreads; j++)
+    {
+        std::thread t(&MultyThreadCopyFileAction<T>::CopyFile, this, j);
+        m_threads.emplace_back(std::move(t));
+    }
+
+    for (auto & th : m_threads)
+    {
+        th.join();
+    }
+
 	std::wcout << L"Amount threads : " << m_amountThreads << std::endl;
 }
