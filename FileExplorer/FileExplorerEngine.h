@@ -47,6 +47,10 @@ void FileExplorerEngine::print(Output_Type & out)
 template<typename Action>
 void FileExplorerEngine::makeAction(Action & action)
 {
-    std::for_each(g_fileMap.begin(), g_fileMap.end(), action);
+   //std::for_each(g_fileMap.begin(), g_fileMap.end(), std::move(action));
+    for (const auto & file : g_fileMap)
+    {
+        action(file);
+    }
 }
 

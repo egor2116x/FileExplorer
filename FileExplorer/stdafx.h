@@ -26,5 +26,6 @@
 #include <thread>
 #include <mutex>
 #include <cmath>
+#include <tuple>
 
 // TODO: reference additional headers your program requires here

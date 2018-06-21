@@ -2,6 +2,8 @@
 
 #define ERROR_CODE unsigned long
 #define INCORRECT_USER_INPUT 1
+#define THREAD_ERRORS        2
+#define FILE_ERRORS          3
 enum class ObjectMark {FILE_MARK, DIR_MARK};
 
 struct Item

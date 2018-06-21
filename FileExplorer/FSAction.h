@@ -59,15 +59,17 @@ class MultyThreadCopyFileAction
 	public:
 		MultyThreadCopyFileAction(const std::wstring & fromFile, const std::wstring & toFile, size_t fileSizeLimit = 50) /* if >50MB multythread on */
             : m_FromFile(fromFile), m_ToFile(toFile), m_fileSizeLimit(fileSizeLimit) {}
-		void operator()(T & i);
+		void operator()(const T & i);
 	private:
-		void CopyFile(size_t idx);
+		void CopyFile(size_t idxThread);
 	private:
 		std::wstring m_FromFile;
 		std::wstring m_ToFile;
 		size_t m_fileSizeLimit; // in MB
 		size_t m_currentFileSize; // in MB
 		size_t m_amountThreads;
+        std::vector<std::thread> m_threads;
+        std::mutex m_mtx;
 };
 
 template<typename T>
@@ -214,104 +216,94 @@ void WriteFileAction<T>::operator()(T & i)
 	os.close();
 }
 
-template<typename T>
-void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
+BOOL RemoveFromEventArray(HANDLE hEvents[], int nSize, int nIndex)
 {
-    // read
-    HANDLE eventEndOfFile = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (nIndex < 0 || nSize <= nIndex)
+        return FALSE;
 
-    if (eventEndOfFile == NULL)
+    for (int i = nIndex + 1; i < nSize; i++)
     {
-        std::cout << "couldn't cteate event" << std::endl;
-        return;
+        hEvents[i - 1] = hEvents[i];
     }
-
-    // calculate size of read/write operation
-	const size_t leftSize = (m_amountThreads - idxThread - 1 != 0 ? m_fileSizeLimit : m_currentFileSize - (m_fileSizeLimit * idxThread));
-
-    HANDLE hFile = CreateFile(m_FromFile.c_str(), GENERIC_READ, FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
-    if (hFile == INVALID_HANDLE_VALUE)
-    {
-        std::wcout << L"Thread : " << idxThread << " file didn't open for read " << m_FromFile << std::endl;
-        return;
-    }
-
-    std::string buffer;
-    buffer.resize(leftSize);
-
-    OVERLAPPED overlapped;
-    overlapped.hEvent = eventEndOfFile;
-    overlapped.Internal = 0;
-    overlapped.InternalHigh = 0;
-    overlapped.Pointer = 0;
-    overlapped.OffsetHigh = 0;
-    overlapped.Offset = m_fileSizeLimit * idxThread;
-
-    if (ReadFile(hFile, reinterpret_cast<LPVOID>(&buffer[0]), buffer.size(), NULL, &overlapped))
-    {
-        std::cout << "sync input " << std::endl;
-    }
-    else if (GetLastError() == ERROR_IO_PENDING)
-    {
-        std::cout << "async input " << std::endl;
-    }
-    else
-    {
-        std::cout << "Thread : " << idxThread << " could not read data from file " << std::endl;
-        CloseHandle(hFile);
-        return;
-    }
-   
-    std::wcout << L"Thread : " << idxThread << L" read data with offset : " << m_fileSizeLimit * idxThread << L" read bytes :" << leftSize << std::endl;
-
-
-    CloseHandle(hFile);
-    CloseHandle(eventEndOfFile);
-    WaitForSingleObject(eventEndOfFile, INFINITE);
-
-    // write
-    HANDLE eventEndOfFileWrite = CreateEvent(NULL, FALSE, FALSE, NULL);
-
-    OVERLAPPED overlappedWrite;
-    overlappedWrite.hEvent = eventEndOfFileWrite;
-    overlappedWrite.Internal = 0;
-    overlappedWrite.InternalHigh = 0;
-    overlappedWrite.Pointer = 0;
-    overlappedWrite.OffsetHigh = 0;
-    overlappedWrite.Offset = m_fileSizeLimit * idxThread;
-
-    hFile = CreateFile(m_ToFile.c_str(), GENERIC_WRITE, FILE_SHARE_DELETE, NULL, OPEN_ALWAYS, FILE_FLAG_OVERLAPPED, NULL);
-    if (hFile == INVALID_HANDLE_VALUE)
-    {
-        std::wcout << L"Thread : " << idxThread << " file didn't open for write " << m_ToFile << std::endl;
-        return;
-    }
-
-    if (WriteFile(hFile, reinterpret_cast<LPVOID>(&buffer[0]), buffer.size(), NULL, &overlappedWrite))
-    {
-        std::cout << "sync output " << std::endl;
-    }
-    else if (GetLastError() == ERROR_IO_PENDING)
-    {
-        std::cout << "async output " << std::endl;
-    }
-    else
-    {
-        std::cout << "Could not write data to file " << std::endl;
-        CloseHandle(hFile);
-        return;
-    }
-    std::wcout << L"Thread : " << idxThread << L" write data with offset : " << m_fileSizeLimit * idxThread << L" write bytes :" << leftSize << std::endl;
-
-    CloseHandle(hFile);
-    CloseHandle(eventEndOfFileWrite);
-    WaitForSingleObject(eventEndOfFileWrite, INFINITE);
+    return TRUE;
 }
 
 template<typename T>
-void MultyThreadCopyFileAction<T>::operator()(T & i)
+void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
 {
-    static std::vector<std::thread> m_threads;
+    m_mtx.lock();
+    std::wcout << L"Start thread: " << idxThread << std::endl;
+    m_mtx.unlock();
+    // read
+    // calculate size of read/write operation
+    bool isLastPartOfData = (m_amountThreads - idxThread - 1 == 0);
+	const size_t leftSize = (isLastPartOfData ? m_currentFileSize - (m_fileSizeLimit * idxThread) : m_fileSizeLimit);
+    std::string buffer;
+    buffer.resize(leftSize);
+    size_t sizeBytesIsReaded = 0;
+    DWORD dwPtr = 0;
+    BOOL res_io = FALSE;
+
+    HANDLE hFileRead = CreateFile(m_FromFile.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL , NULL);
+    if (hFileRead == INVALID_HANDLE_VALUE)
+    {
+        throw FileExeption(FILE_ERRORS, "file didn't open for reading");
+    }
+
+    dwPtr = SetFilePointer(hFileRead, m_fileSizeLimit * idxThread, NULL, FILE_BEGIN);
+    if (dwPtr == INVALID_SET_FILE_POINTER)
+    {
+        CloseHandle(hFileRead);
+        throw FileExeption(FILE_ERRORS, "invalid set file pointer for reading");
+    }
+
+    res_io = ReadFile(hFileRead, reinterpret_cast<LPVOID>(&buffer[0]), buffer.size(), reinterpret_cast<LPDWORD>(&sizeBytesIsReaded), NULL);
+    if (!res_io)
+    {
+        CloseHandle(hFileRead);
+        throw FileExeption(FILE_ERRORS, "Error of reading");
+    }
+    CloseHandle(hFileRead);
+    res_io = FALSE;
+
+    m_mtx.lock();
+    std::wcout << L"Thread: " << idxThread << L" have read data" << std::endl;
+    m_mtx.unlock();
+
+    // write
+    HANDLE hFileWrite = CreateFile(m_ToFile.c_str(), GENERIC_WRITE, FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL , NULL);
+    if (hFileWrite == INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(hFileWrite);
+        throw FileExeption(FILE_ERRORS, "file didn't open for writting");
+    }
+
+    dwPtr = SetFilePointer(hFileWrite, m_fileSizeLimit * idxThread, NULL, FILE_BEGIN);
+    if (dwPtr == INVALID_SET_FILE_POINTER)
+    {
+        CloseHandle(hFileWrite);
+        throw FileExeption(FILE_ERRORS, "invalid set file pointer for writting");
+    }
+
+    res_io = WriteFile(hFileWrite, reinterpret_cast<LPVOID>(&buffer[0]), buffer.size(), reinterpret_cast<LPDWORD>(&sizeBytesIsReaded), NULL);
+    if (!res_io)
+    {
+        CloseHandle(hFileWrite);
+        throw FileExeption(FILE_ERRORS, "Error of reading");
+    }
+    m_mtx.lock();
+    std::wcout << L"Thread: " << idxThread << L" have write data" << std::endl;
+    m_mtx.unlock();
+    CloseHandle(hFileWrite);
+    m_mtx.lock();
+    std::wcout << L"Thread: " << idxThread << L" is ended" << std::endl;
+    m_mtx.unlock();
+}
+
+template<typename T>
+void MultyThreadCopyFileAction<T>::operator()(const T & i)
+{
+
 	std::wstring fullFilePath = i.m_path + i.m_fName;
 	if (fullFilePath.compare(m_FromFile) != 0)
 	{
@@ -324,7 +316,7 @@ void MultyThreadCopyFileAction<T>::operator()(T & i)
 	}
 
 	m_currentFileSize = i.m_size;
-	m_fileSizeLimit = (m_fileSizeLimit > 0 ? m_fileSizeLimit * 1000000 : 1000000);
+	m_fileSizeLimit = (m_fileSizeLimit > 0 ? m_fileSizeLimit * 1024 * 1024 : 1024 * 1024);
 	m_amountThreads = static_cast<size_t>((m_currentFileSize / m_fileSizeLimit) <= 0 
 						? 1 : std::ceil(static_cast<double>(m_currentFileSize) / static_cast<double>(m_fileSizeLimit)));
 
