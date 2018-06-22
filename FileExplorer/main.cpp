@@ -24,6 +24,10 @@ int main()
     {
         std::cout << ex.what() << std::endl;
     }
+    catch (const FileExeption & ex)
+    {
+        std::cout << ex.what() << std::endl;
+    }
 
 	std::cout << "Press any key for exit";
     std::cin.get();

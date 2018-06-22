@@ -247,21 +247,28 @@ void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
     HANDLE hFileRead = CreateFile(m_FromFile.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL , NULL);
     if (hFileRead == INVALID_HANDLE_VALUE)
     {
-        throw FileExeption(FILE_ERRORS, "file didn't open for reading");
+        m_mtx.lock();
+        std::wcout << L"Thread: " << idxThread << L" INVALID_HANDLE_VALUE when try opening for read" << std::endl;
+        m_mtx.unlock();
+        return;
     }
 
     dwPtr = SetFilePointer(hFileRead, m_fileSizeLimit * idxThread, NULL, FILE_BEGIN);
     if (dwPtr == INVALID_SET_FILE_POINTER)
     {
         CloseHandle(hFileRead);
-        throw FileExeption(FILE_ERRORS, "invalid set file pointer for reading");
+        m_mtx.lock();
+        std::wcout << L"Thread: " << idxThread << L" invalid set file pointer for reading" << std::endl;
+        m_mtx.unlock();
     }
 
     res_io = ReadFile(hFileRead, reinterpret_cast<LPVOID>(&buffer[0]), buffer.size(), reinterpret_cast<LPDWORD>(&sizeBytesIsReaded), NULL);
     if (!res_io)
     {
         CloseHandle(hFileRead);
-        throw FileExeption(FILE_ERRORS, "Error of reading");
+        m_mtx.lock();
+        std::wcout << L"Thread: " << idxThread << L" Error of reading" << std::endl;
+        m_mtx.unlock();
     }
     CloseHandle(hFileRead);
     res_io = FALSE;
@@ -275,21 +282,30 @@ void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
     if (hFileWrite == INVALID_HANDLE_VALUE)
     {
         CloseHandle(hFileWrite);
-        throw FileExeption(FILE_ERRORS, "file didn't open for writting");
+        m_mtx.lock();
+        std::wcout << L"Thread: " << idxThread << L" file didn't open for writting" << std::endl;
+        m_mtx.unlock();
+        return;
     }
 
     dwPtr = SetFilePointer(hFileWrite, m_fileSizeLimit * idxThread, NULL, FILE_BEGIN);
     if (dwPtr == INVALID_SET_FILE_POINTER)
     {
         CloseHandle(hFileWrite);
-        throw FileExeption(FILE_ERRORS, "invalid set file pointer for writting");
+        m_mtx.lock();
+        std::wcout << L"Thread: " << idxThread << L" invalid set file pointer for writting" << std::endl;
+        m_mtx.unlock();
+        return;
     }
 
     res_io = WriteFile(hFileWrite, reinterpret_cast<LPVOID>(&buffer[0]), buffer.size(), reinterpret_cast<LPDWORD>(&sizeBytesIsReaded), NULL);
     if (!res_io)
     {
         CloseHandle(hFileWrite);
-        throw FileExeption(FILE_ERRORS, "Error of reading");
+        m_mtx.lock();
+        std::wcout << L"Thread: " << idxThread << L" Error of reading" << std::endl;
+        m_mtx.unlock();
+        return;
     }
     m_mtx.lock();
     std::wcout << L"Thread: " << idxThread << L" have write data" << std::endl;
