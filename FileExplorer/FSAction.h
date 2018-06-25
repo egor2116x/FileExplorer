@@ -2,6 +2,7 @@
 #include "stdafx.h"
 #include "Common.h"
 #include "FileHandleGuard.h"
+#include "Log.h"
 
 template<typename T>
 class RenameFileAction
@@ -69,7 +70,6 @@ class MultyThreadCopyFileAction
 		size_t m_currentFileSize; // in MB
 		size_t m_amountThreads;
         std::vector<std::thread> m_threads;
-        std::mutex m_mtx;
 };
 
 template<typename T>
@@ -231,9 +231,8 @@ BOOL RemoveFromEventArray(HANDLE hEvents[], int nSize, int nIndex)
 template<typename T>
 void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
 {
-    m_mtx.lock();
-    std::wcout << L"Start thread: " << idxThread << std::endl;
-    m_mtx.unlock();
+    Log & log = Log::GetInstance();
+    log.PrintToLog(idxThread, L" start thread");
     // read
     // calculate size of read/write operation
     bool isLastPartOfData = (m_amountThreads - idxThread - 1 == 0);
@@ -247,66 +246,48 @@ void MultyThreadCopyFileAction<T>::CopyFile(size_t idxThread)
     FileHandleGuard hFileRead(CreateFile(m_FromFile.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL , NULL));
     if (hFileRead.Get() == INVALID_HANDLE_VALUE)
     {
-        m_mtx.lock();
-        std::wcout << L"Thread: " << idxThread << L" INVALID_HANDLE_VALUE when try opening for read" << std::endl;
-        m_mtx.unlock();
+        log.PrintToLog(idxThread, L" INVALID_HANDLE_VALUE when try opening for read");
         return;
     }
 
     dwPtr = SetFilePointer(hFileRead.Get(), m_fileSizeLimit * idxThread, NULL, FILE_BEGIN);
     if (dwPtr == INVALID_SET_FILE_POINTER)
     {
-        m_mtx.lock();
-        std::wcout << L"Thread: " << idxThread << L" invalid set file pointer for reading" << std::endl;
-        m_mtx.unlock();
+        log.PrintToLog(idxThread, L" invalid set file pointer for reading");
     }
 
     res_io = ReadFile(hFileRead.Get(), reinterpret_cast<LPVOID>(&buffer[0]), buffer.size(), reinterpret_cast<LPDWORD>(&sizeBytesIsReaded), NULL);
     if (!res_io)
     {
-        m_mtx.lock();
-        std::wcout << L"Thread: " << idxThread << L" Error of reading" << std::endl;
-        m_mtx.unlock();
+        log.PrintToLog(idxThread, L" Error of reading");
     }
     res_io = FALSE;
 
-    m_mtx.lock();
-    std::wcout << L"Thread: " << idxThread << L" have read data" << std::endl;
-    m_mtx.unlock();
+    log.PrintToLog(idxThread, L" have read data");
 
     // write
     FileHandleGuard hFileWrite(CreateFile(m_ToFile.c_str(), GENERIC_WRITE, FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL , NULL));
     if (hFileWrite.Get() == INVALID_HANDLE_VALUE)
     {
-        m_mtx.lock();
-        std::wcout << L"Thread: " << idxThread << L" file didn't open for writting" << std::endl;
-        m_mtx.unlock();
+        log.PrintToLog(idxThread, L" file didn't open for writting");
         return;
     }
 
     dwPtr = SetFilePointer(hFileWrite.Get(), m_fileSizeLimit * idxThread, NULL, FILE_BEGIN);
     if (dwPtr == INVALID_SET_FILE_POINTER)
     {
-        m_mtx.lock();
-        std::wcout << L"Thread: " << idxThread << L" invalid set file pointer for writting" << std::endl;
-        m_mtx.unlock();
+        log.PrintToLog(idxThread, L" invalid set file pointer for writting");
         return;
     }
 
     res_io = WriteFile(hFileWrite.Get(), reinterpret_cast<LPVOID>(&buffer[0]), buffer.size(), reinterpret_cast<LPDWORD>(&sizeBytesIsReaded), NULL);
     if (!res_io)
     {
-        m_mtx.lock();
-        std::wcout << L"Thread: " << idxThread << L" Error of reading" << std::endl;
-        m_mtx.unlock();
+        log.PrintToLog(idxThread, L" Error of reading");
         return;
     }
-    m_mtx.lock();
-    std::wcout << L"Thread: " << idxThread << L" have write data" << std::endl;
-    m_mtx.unlock();
-    m_mtx.lock();
-    std::wcout << L"Thread: " << idxThread << L" is ended" << std::endl;
-    m_mtx.unlock();
+    log.PrintToLog(idxThread, L" have write data");
+    log.PrintToLog(idxThread, L" is ended");
 }
 
 template<typename T>
@@ -325,7 +306,7 @@ void MultyThreadCopyFileAction<T>::operator()(const T & i)
 	}
 
 	m_currentFileSize = i.m_size;
-	m_fileSizeLimit = (m_fileSizeLimit > 0 ? m_fileSizeLimit * 1024 * 1024 : 1024 * 1024);
+	m_fileSizeLimit = (m_fileSizeLimit > 0 ? m_fileSizeLimit * 1024 * 1024 : 1024 * 1024); //convert to MB
 	m_amountThreads = static_cast<size_t>((m_currentFileSize / m_fileSizeLimit) <= 0 
 						? 1 : std::ceil(static_cast<double>(m_currentFileSize) / static_cast<double>(m_fileSizeLimit)));
 

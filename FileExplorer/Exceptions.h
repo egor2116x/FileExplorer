@@ -5,29 +5,29 @@
 class UserInputException : public std::exception
 {
 public:
-    UserInputException(ERROR_CODE code, const char * const message) :
+    UserInputException(ExceptionErrorTypes code, const char * const message) :
         exception(message), m_code(code) {}
-    ERROR_CODE GetErrorCode() const { return m_code; }
+    ExceptionErrorTypes GetErrorCode() const { return m_code; }
 private:
-    ERROR_CODE m_code;
+    ExceptionErrorTypes m_code;
 };
 
 class ThreadExeption : public std::exception
 {
 public:
-    ThreadExeption(ERROR_CODE code, const char * const message) :
+    ThreadExeption(ExceptionErrorTypes code, const char * const message) :
         exception(message), m_code(code) {}
-    ERROR_CODE GetErrorCode() const { return m_code; }
+    ExceptionErrorTypes GetErrorCode() const { return m_code; }
 private:
-    ERROR_CODE m_code;
+    ExceptionErrorTypes m_code;
 };
 
 class FileExeption : public std::exception
 {
 public:
-    FileExeption(ERROR_CODE code, const char * const message) :
+    FileExeption(ExceptionErrorTypes code, const char * const message) :
         exception(message), m_code(code) {}
-    ERROR_CODE GetErrorCode() const { return m_code; }
+    ExceptionErrorTypes GetErrorCode() const { return m_code; }
 private:
-    ERROR_CODE m_code;
+    ExceptionErrorTypes m_code;
 };

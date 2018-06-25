@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "FileExplorerEngine.h"
+#include "FileHandleGuard.h"
 
 size_t FileExplorerEngine::GetFileSize(WIN32_FIND_DATA & _wfd) const noexcept
 {
@@ -19,7 +20,7 @@ void FileExplorerEngine::GetListFilesInFolder(std::wstring & folderPath)
     {
         if (m_rootFolderPath.empty())
         {
-            throw UserInputException(INCORRECT_USER_INPUT, "No such file root directory");
+            throw UserInputException(ExceptionErrorTypes::INCORRECT_USER_INPUT, "No such file root directory");
         }
         folderPath = m_rootFolderPath;
     }
